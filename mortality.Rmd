@@ -1,0 +1,94 @@
+---
+title: "NodeMerging"
+author: "Theodoros Papakonstantinou"
+date: "2024-01-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(netmeta)
+library(readxl)
+source("studygraph.R")
+```
+
+Read mortality data
+
+```{r readData, echo=T}
+ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-LS-SW.xlsx")
+
+#Insert variance
+studyTable <- ACM_5_with_networks %>% 
+  filter(!is.na(effect)) %>% 
+  mutate(var = se^2)
+```
+
+Get all studies
+
+```{r studies ,echo=T}
+studyIds <- unique(studyTable$id)
+```
+
+There are `r length(studyIds)` studies
+
+We now check which of the studies can be used
+
+```{r studyProcessing, echo=T}
+errorstudies <- c()
+studyInconsistency <- data.frame()
+studyGraphs <- lapply(studyIds, function(stid){
+  tryCatch({
+    stgr <- fullGraph(stid, studyTable ,rand=F)
+    studyInconsistency <<- rbind(studyInconsistency
+                                , list(id=stgr$study
+                                      , Q=stgr$Q
+                                      , dofs=stgr$dofs
+                                      , inc=stgr$inc
+                                      ))
+  },error = function(cond){
+    # print(c("error in study",stid))
+    errorstudies <<- c(errorstudies,stid)
+    # message(conditionMessage(cond))
+  })
+})
+usableStudies <- setdiff(studyIds, errorstudies)
+studyInconsistency <- studyInconsistency %>% as.data.frame()
+moreIncs <- studyInconsistency[order(studyInconsistency$inc, decreasing = T),]
+```
+
+We can not use the following studies `r errorstudies` because of Inconsistency in their reported variance.
+
+So we move on with the following `r length(usableStudies)`: `r usableStudies`
+
+### Inconsistencies in multiarms
+
+The following studies present inconsistency in their relative effects: `r moreIncs[moreIncs$Q>0,]$id`. Specifically the first `r length(moreIncs[moreIncs$Q>0 & moreIncs$inc>1,])` should be checked.
+
+### Analysis and forest plots
+
+For each network, the network plot and the forest plots of logRRs using the random effects model are shown. We also give the heterogeneity standard deviation and the Pscores (the frequentist analogue of SUCRA) for each network.
+
+```{r Analysis}
+lapply(1:7,function(netid){
+  print(paste("Network ", netid, sep=""))
+  studyRows <- Reduce(function(acc, sid){
+    tryCatch({
+      sg <- fullGraph(sid,studyTable)
+      ns <- prepareStudyForNetwork(sg,netid,studyTable)
+      nsr <- rowsFromGraph(ns)
+      acc <- rbind(nsr,acc)
+    },error = function(cond){
+    })
+    return(acc)
+    },usableStudies,data.frame())
+  net1 <- netmeta(TE=TE,seTE=seTE,treat1=treat1,treat2=treat2,studlab=studlab
+                  ,data=studyRows)
+  netgraph(net1)
+  forest(net1,pooled="random")
+  print(paste("tau: ",net1$tau, sep=""))
+  Pscores=netrank(net1, small.values = "good")
+  Pscores
+})
+```
