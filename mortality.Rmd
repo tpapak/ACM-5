@@ -56,6 +56,7 @@ studyGraphs <- lapply(studyIds, function(stid){
 usableStudies <- setdiff(studyIds, errorstudies)
 studyInconsistency <- studyInconsistency %>% as.data.frame()
 moreIncs <- studyInconsistency[order(studyInconsistency$inc, decreasing = T),]
+studyInconsistency
 ```
 
 We can not use the following studies `r errorstudies` because of Inconsistency in their reported variance.
@@ -64,7 +65,7 @@ So we move on with the following `r length(usableStudies)`: `r usableStudies`
 
 ### Inconsistencies in multiarms
 
-The following studies present inconsistency in their relative effects: `r moreIncs[moreIncs$Q>0,]$id`. Specifically the first `r length(moreIncs[moreIncs$Q>0 & moreIncs$inc>1,])` should be checked.
+The following studies present inconsistency in their relative effects: `r moreIncs[moreIncs$Q>0,]$id`. Specifically the first `r nrow(moreIncs[moreIncs$Q>0 & moreIncs$inc>1,])` should be checked.
 
 ### Analysis and forest plots
 

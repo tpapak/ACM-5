@@ -1,6 +1,6 @@
-library("igraph")
-library("dplyr")
-library("matlib")
+library(matlib)
+library(dplyr)
+library(igraph)
 getArms <- function(study,tr1name="treat 1",tr2name="treat 2"){
   res <- unique(unlist(c(study[tr1name],study[tr2name])))
   res
@@ -95,8 +95,8 @@ varianceGraph <- function(studygraph, spt){
                       ,label=V(spt)$label
                       ,degree=degree(spt,V(spt))
                       ,strength=strength(spt,V(spt),weights=E(spt)$variance))%>%
-      filter(degree>1) %>%
-      arrange(strength, degree)
+              filter(degree>1) %>% 
+              arrange(strength, degree)
     cornerV <- vss[1,]
     eij <- neighbors(spt, cornerV$vid)
     vi <- eij[1]
@@ -120,10 +120,14 @@ varianceMatrix <- function(variancegraph){
 }
 
 treatVars <- function(studygraph, spt){
-  vg <- varianceGraph(studygraph, spt)
-  mv <- varianceMatrix(vg)
-  vij <- matrix(ncol=1, E(vg)$variance)
-  vars <- inv(mv) %*% vij
+  if(ecount(spt)>1){
+    vg <- varianceGraph(studygraph, spt)
+    mv <- varianceMatrix(vg)
+    vij <- matrix(ncol=1, E(vg)$variance)
+    vars <- inv(mv) %*% vij
+  }else{
+    vars <- matrix(ncol=1,rep(E(spt)$variance/2,2))
+  }
   if(any(vars<0)){stop("found negative variances")}
   return(vars)
 }
@@ -154,7 +158,11 @@ treatEffects <- function(sp){
     return(acc)
   },1:ecount(sp),efm)[,-1]
   eij <- matrix(ncol=1, E(sp)$effect)
-  effs <- inv(efmm) %*% eij
+  if(ecount(sp)>1){
+    effs <- inv(efmm) %*% eij
+  }else{
+    effs<-efmm*E(sp)$effect
+  }
   return(effs)
 }
 
@@ -225,8 +233,10 @@ inconsistency <- function(gr, spt){
 }
 
 plotSG <- function(gr){
-  plot(gr, edge.label=E(gr)$diff
-       ,graph.label=gr$study)
+  plot( gr, edge.label=E(gr)$diff
+      , graph.label=gr$study
+      , layout=layout_in_circle(sg)
+      )
 }
 
 prepareStudyForNetwork <- function(gr, netid, studyTable){
@@ -301,6 +311,15 @@ rowsFromGraph <- function(fg){
                     ,treat2=rows[5,])
   return(res)
 }
+
+# library(readxl)
+# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-LS-SW.xlsx")
+# # 
+# #Insert variance
+# studyTable <- ACM_5_with_networks %>%
+#   filter(!is.na(effect)) %>%
+#   mutate(var = se^2)
+# sg <- fullGraph("62",studyTable)
 
 # netid <- 2
 # 
