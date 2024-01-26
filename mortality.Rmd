@@ -17,7 +17,8 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-LS-SW.xlsx")
+# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
+ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-with-Argos.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 
@@ -56,7 +57,7 @@ studyGraphs <- lapply(studyIds, function(stid){
 usableStudies <- setdiff(studyIds, errorstudies)
 studyInconsistency <- studyInconsistency %>% as.data.frame()
 moreIncs <- studyInconsistency[order(studyInconsistency$inc, decreasing = T),]
-studyInconsistency
+# studyInconsistency
 ```
 
 We can not use the following studies `r errorstudies` because of Inconsistency in their reported variance.
