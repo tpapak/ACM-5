@@ -1,6 +1,7 @@
 library(matlib)
 library(dplyr)
 library(igraph)
+library(MASS)
 getArms <- function(study,tr1name="treat 1",tr2name="treat 2"){
   res <- unique(unlist(c(study[tr1name],study[tr2name])))
   res
@@ -29,7 +30,7 @@ edgeFromRow <- function(row,vertices) {
 
 studyGraph <- function(studyid, data) {
   strows <- subset(data, id==studyid) %>%
-    select(id, `treat 1`, `treat 2`, effect, var)
+    dplyr::select(id, `treat 1`, `treat 2`, effect, var)
   vertices <- getVertices(strows)
   edges <- sapply(1:nrow(strows),function(r){
     e <- edgeFromRow(strows[r,],vertices)
@@ -64,6 +65,7 @@ studyGraph <- function(studyid, data) {
     # print(c("vi",vi))
     return(vi$`treat 1`)
   },1:nrow(edgeList))  %>% unlist()
+  graph_attr(stgr,name="study")<-studyid
   edge_attr(stgr,name="variance",index=E(stgr))<-vars 
   edge_attr(stgr,name="effect",index=E(stgr))<-effs
   edge_attr(stgr,name="treat1",index=E(stgr))<-treat1
@@ -124,7 +126,24 @@ treatVars <- function(studygraph, spt){
     vg <- varianceGraph(studygraph, spt)
     mv <- varianceMatrix(vg)
     vij <- matrix(ncol=1, E(vg)$variance)
-    vars <- inv(mv) %*% vij
+    ##If there higher than triangle order polygons the design matrix
+    #is not invertible so we use the pseudoinverse of MASS::ginv
+    vars <- MASS::ginv(mv) %*% vij
+    #Remove all loops so no inconsistencies happen 
+    if(any(vars<0)){
+        vg <- varianceGraph(spt, spt)
+        loopedges <- difference(studygraph, spt)
+        edgelbels <- paste(E(loopedges)$comparison,collapse=",")
+        wmes <- paste( "found negative variances in study "
+                     , studygraph$study
+                     , " the following comparisons will be ignored in order to get consistent variances "
+                     , edgelbels
+                     , sep="")
+        warning(wmes)
+        mv <- varianceMatrix(vg)
+        vij <- matrix(ncol=1, E(vg)$variance)
+        vars <- MASS::ginv(mv) %*% vij
+      }
   }else{
     vars <- matrix(ncol=1,rep(E(spt)$variance/2,2))
   }
@@ -166,8 +185,23 @@ treatEffects <- function(sp){
   return(effs)
 }
 
+labelEdges <- function (gr){
+  getEdgeLabel <- function(gr, eid){
+    vi <- ends(gr, E(gr))[eid,1]
+    vj <- ends(gr, E(gr))[eid,2]
+    paste(V(gr)$label[vi],V(gr)$label[vj],sep=":")
+  }
+  edgelabels <- lapply(1:ecount(gr), function(ei){
+    return(getEdgeLabel(gr,ei))
+  }) %>% unlist()
+  edge_attr(gr, name="comparison") <- edgelabels
+  return(gr)
+}
+
 fullGraph <- function(studyid, data, rand=F){
   gr <- studyGraph(studyid, data)
+  edge_attr(gr,name="oldvariance")<-E(gr)$variance 
+  gr <- labelEdges(gr)
   spt <- studySpanningTree(gr, rand)
   vars <- treatVars(gr, spt)
   vertex_attr(gr, name="vi")<-vars
@@ -187,6 +221,7 @@ fullGraph <- function(studyid, data, rand=F){
   edge.attributes(dgr)<-edge.attributes(gr)
   vertex.attributes(dgr)<-vertex.attributes(gr)
   dgr <- inconsistency(dgr, spt)
+  dgr <- labelEdges(dgr)
   return(dgr)
 }
 
@@ -194,6 +229,39 @@ fullGraph <- function(studyid, data, rand=F){
 inconsistency <- function(gr, spt){
   loopedges <- difference(as.undirected(gr), spt)
   diffs <- lapply(1:ecount(gr), function(ei){
+    eij <- ends(gr,E(gr))[ei,]
+    vi <- eij[1]
+    vj <- eij[2]
+    if(get.edge.ids(loopedges,c(vi,vj))>0){
+      #found effect
+      teff <- V(gr)$effi[vj]-V(gr)$effi[vi]
+      #reported effect
+      reff <- E(gr)$effect[ei]
+      var <- E(gr)$variance[ei]
+      diff <- reff - teff
+      res <- abs(diff)
+    }else{
+      res <- NA
+    }
+    return(res)
+  }) %>% unlist()
+  varRess <- lapply(1:ecount(gr), function(ei){
+    eij <- ends(gr,E(gr))[ei,]
+    vi <- eij[1]
+    vj <- eij[2]
+    if(get.edge.ids(loopedges,c(vi,vj))>0){
+      #found effect
+      teff <- V(gr)$vi[vj]+V(gr)$vi[vi]
+      #reported effect
+      var <- E(gr)$oldvariance[ei]
+      diff <- teff - var
+      res <- abs(diff)
+    }else{
+      res <- NA
+    }
+    return(res)
+  }) %>% unlist()
+  qis <- lapply(1:ecount(gr), function(ei){
     eij <- ends(gr,E(gr))[ei,]
     vi <- eij[1]
     vj <- eij[2]
@@ -223,20 +291,71 @@ inconsistency <- function(gr, spt){
     return(res)
   }) %>% unlist()
   edge_attr(gr, name="diff")<-diffs
+  edge_attr(gr, name="varRes")<-varRess
   nw <- sum (vars,na.rm=T)
-  Q <- sum(diffs, na.rm=T) 
+  Q <- sum(qis, na.rm=T)
   dofs <- ecount(loopedges)
+  pvalue <- pchisq(Q, dofs, lower.tail = F)
   graph_attr(gr, name="Q")<-Q
   graph_attr(gr, name="dofs")<-dofs
-  graph_attr(gr, name="inc")<-Q/dofs
+  graph_attr(gr, name="pvalue")<-pvalue
   return(gr)
 }
 
-plotSG <- function(gr){
-  plot( gr, edge.label=E(gr)$diff
-      , graph.label=gr$study
-      , layout=layout_in_circle(sg)
+plotVarRes <- function(gr,circ=F){
+  if(circ==F){
+  plot( gr, edge.label=round(E(gr)$varRes,4)
+      , main=paste(gr$study,"Variance Residuals")
       )
+  }else{
+    plot( gr, edge.label=round(E(gr)$varRes,4)
+        , main=paste(gr$study,"Variance Residuals")
+        , layout=layout_in_circle(sg)
+        )
+  }
+}
+
+plotDiffs <- function(gr,circ=F){
+  if(circ==F){
+  plot( gr, edge.label=round(E(gr)$diff,4)
+      , main=paste(gr$study,"Residuals Effects")
+      )
+  }else{
+    plot( gr, edge.label=round(E(gr)$diff,4)
+        , main=paste(gr$study,"Residuals Effects")
+        , layout=layout_in_circle(sg)
+        )
+  }
+}
+
+plotVars <- function(gr,circ=F){
+  if(circ==F){
+    plot(gr, edge.label=round(E(sg)$variance,4)
+        , main=paste(gr$study,"variances")
+    )
+  }else{
+    plot(gr, edge.label=round(E(sg)$variance,4)
+       , layout=layout_in_circle(gr)
+        , main=paste(gr$study,"variances")
+    )
+         
+    
+  }
+}
+
+plotEffects <- function(gr,circ=F){
+  if(circ==F){
+    plot(gr
+        , edge.label=round(E(sg)$effect,4)
+        , main=paste(gr$study,"effects")
+    )
+  }else{
+    plot(gr
+         , edge.label=round(E(sg)$effect,4)
+          , main=paste(gr$study,"effects")
+         , layout=layout_in_circle(gr)
+    )
+  }
 }
 
 prepareStudyForNetwork <- function(gr, netid, studyTable){
@@ -313,13 +432,17 @@ rowsFromGraph <- function(fg){
 }
 
 # library(readxl)
-# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-LS-SW.xlsx")
-# # 
+# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
+# #
 # #Insert variance
 # studyTable <- ACM_5_with_networks %>%
 #   filter(!is.na(effect)) %>%
 #   mutate(var = se^2)
-# sg <- fullGraph("62",studyTable)
+# 
+# # st <- studyTable %>% filter(id=="115") %>% filter(`treat 1`!="MUFA")
+# st <- studyTable %>% filter(`treat 2`!="PRO")
+# sg <- fullGraph("44",st)
+# plotSG(sg)
 
 # netid <- 2
 # 
@@ -327,29 +450,3 @@ rowsFromGraph <- function(fg){
 # n2s <- prepareStudyForNetwork(sg,netid,studyTable)
 # n2sr <- rowsFromGraph(n2s)
 # n2sr
-
-# s8g <- fullGraph("8",studyTable)
-
-# s8g <- fullGraph("8",studyTable)
-
-# s62g <- fullGraph("62",studyTable)
-# 
-# s15g <- studyGraph("15",studyTable)
-# s15spt <- studySpanningTree(s15g)
-# s15vg <- varianceGraph(s15g)
-# s15vm <- varianceMatrix(s15vg)
-# s15vars <- treatVars(s15g)
-
-
-# s22g <- studyGraph("22",studyTable)
-# s22spt <- studySpanningTree(s22g)
-# s22vg <- varianceGraph(s22g)
-# s22vm <- varianceMatrix(s22vg)
-# s22vars <- treatVars(s22g)
-
-
-
-
-
-
-

@@ -1,0 +1,237 @@
+---
+title: "ProblematicStudies"
+author: "Theodoros Papakonstantinou"
+date: "2024-02-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(netmeta)
+library(readxl)
+source("studygraph.R")
+```
+```{r readData, echo=F}
+ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
+
+#Insert variance
+studyTable <- ACM_5_with_networks %>% 
+  filter(!is.na(effect)) %>% 
+  mutate(var = se^2)
+```
+
+In order to include studies with negative variances I first tried to ignore excess comparisons, as if the study was star (tree) with no loops.
+That does not guarantee that the variances will be consistent as it does for the effects.
+So by using the new way of overcoming negative variances let's examine the problematic studies one by one
+
+### Study 44
+Study graph with comparison variances
+```{r study44, echo=T}
+sg <- studyGraph("44",studyTable)
+print("Study graph with variances:")
+plotVars(sg)
+```
+
+First thing we see is that there is PRO as well as AP and PP which should not 
+exist in the same study. So let's remove the **CHO-PRO** comparison
+```{r study44noPro, echo=T}
+
+# st <- studyTable %>% filter(`treat 2`!="PRO") %>% filter(!(`treat 1`=="CHO" & `treat 2`=="PP"))
+st <- studyTable %>% filter(`treat 2`!="PRO") 
+sg <- studyGraph("44",st)
+```
+
+We will only use the following comparisons
+```{r study44noProspt, echo=T}
+spt <- studySpanningTree(sg)
+plot(spt)
+```
+
+If we try to get the variance now we still get negative values
+```{r study44noProvars, echo=T}
+sg <- fullGraph("44",st, rand=F)
+```
+We can ignore the extra comparison to get consistent variances.
+
+We still have to check for effect inconsistencies though. 
+Let's first plot the effects found 
+```{r study44noProEffect, echo=T}
+plotEffects(sg)
+```
+
+Now the residuals of the effects:
+```{r study44noProDiff, echo=T}
+plotDiffs(sg)
+```
+
+There is substantial difference between the calculated effect and the reported one, so there is inconsistency in both variance and effects. In order to include study 44 we can ignore CHO-PP or any other one but we have to justify the choice. 
+
+### Study 51
+Study 51 has a comparison with a very very big effect
+```{r study51, echo=T}
+st <- studyTable
+sg <- studyGraph("51",st)
+plotEffects(sg)
+```
+
+If we remove the problematic "TFA-CHO" that has huge effect due to 
+the dose response model artifact for small doses (if I remember correctly)
+```{r study51noTFACHO, echo=T}
+st <- studyTable %>% filter(!(`treat 1`=="TFA" & `treat 2`=="CHO"))
+tryCatch({
+  fullGraph("51",st)
+  }
+  ,error = function(cond){
+    print(paste("error in study 51",cond))
+  }
+)
+```
+We still get negative variances even if we ignore all excess comparisons. 
+
+But what happens also in this study is that some fats are reported along with the pooled FAT. 
+If we exclude the FAT-CHO comparison, we can calculate the variances by omitting the excess comparisons, which is done automatically by the program.
+```{r study51noFAT, echo=T}
+st <- studyTable %>% filter(`treat 1`!="FAT")%>% filter(!(`treat 1`=="TFA" & `treat 2`=="CHO"))
+sg <- fullGraph("51",st)
+```
+
+The good news is that we get relatively consistent effects as is shown by the effects and their residuals
+```{r study51noFATeffects, echo=T}
+plotEffects(sg)
+plotDiffs(sg)
+```
+
+Study 51 is ok if we ignore "TFA-CHO" and "FAT-CHO".
+
+### Study 115
+The problem with study 115 was that there was no triangles but a square instead. I adjusted the code to be able to process such networks.
+
+Let's plot it 
+```{r study115, echo=T}
+st <- studyTable %>% filter(id=="115")
+sg <- studyGraph("115", st)
+plotEffects(sg)
+```
+
+Again here there are MUFA-A MUFA-P and MUFA comparisons.
+Let's remove the MUFA comparisons and plot the effects and residual
+```{r study115noMUFA, echo=T}
+st <- studyTable %>% filter(id=="115") %>% filter(`treat 1`!="MUFA")
+
+tryCatch({
+  sg <- fullGraph("115",st)
+  }
+  ,error = function(cond){
+    print(paste("error in study 115",cond))
+  }
+)
+plotEffects(sg)
+plotDiffs(sg)
+```
+
+The residual effect of MUFA-A-CHO is large so 115 should also be fixed.
+
+### Study 159
+
+Let's plot it 
+```{r study159, echo=T}
+st <- studyTable %>% filter(id=="159")
+
+tryCatch({
+  sg <- fullGraph("159",st)
+  }
+  ,error = function(cond){
+    print(paste("error in study 159",cond))
+  }
+)
+plotEffects(sg)
+plotDiffs(sg)
+plotVars(sg)
+plotVarRes(sg)
+```
+
+Study 159 can be included as is.
+
+# Study 196
+Let's plot it 
+```{r study196, echo=T}
+st <- studyTable %>% filter(id=="196")
+
+tryCatch({
+  sg <- fullGraph("196",st)
+  }
+  ,error = function(cond){
+    print(paste("error in study 196",cond))
+  }
+)
+plotEffects(sg)
+plotDiffs(sg)
+```
+
+Since there are MUFA-A MUFA-P and MUFA let's remove the MUFA comparisons.
+And also PUFA which have the same problem.
+
+```{r study196noMUFA, echo=T}
+st <- studyTable %>% filter(id=="196") %>% filter(`treat 1`!="PUFA") %>% 
+  filter(`treat 1`!="MUFA")
+
+tryCatch({
+  sg <- fullGraph("196",st)
+  }
+  ,error = function(cond){
+    print(paste("error in study 196",cond))
+  }
+)
+plotEffects(sg,circ=F)
+plotDiffs(sg,circ=F)
+# plotVars(sg,circ=F)
+# plotVarRes(sg,circ=F)
+```
+
+There are big residuals (n3-PUFA : SFA) in the effects so study 196 should also be checked.
+
+# Conclusions
+
+## Pooled Arms
+By reviewing the studies not included because of negative variances we realized a problem in studies that report comparisons with both pooled
+and unpooled arms for example study 44 has "AP" "PP" but also "PRO" as nodes.
+
+Since we prefer to keep the reported poooled arm if the pooled and unpooled arms don't belong to the same network we can easily separate them by changing the study id.
+Otherwise the population of the common comparator will be included multiple times which is a mistake and in the case of study 51 produces negative variances.
+
+## Effect inconsistencies
+
+All studies with considerable residuals (absolute difference of reported and calculated effect) in their effects should be checked and only comparisons that are acceptable be included. It is the same problem we had with study 8.
+
+The following studies are problematic and should be checked; if you find the residuals small we can leave them as is.
+```{r studyProcessing, echo=T}
+studyIds <- unique(studyTable$id)
+errorstudies <- c()
+warnmess <- c()
+studyInconsistency <- data.frame()
+studyGraphs <- lapply(studyIds, function(stid){
+  res <- {}
+  tryCatch({
+    stgr <- fullGraph(stid, studyTable ,rand=F)
+    studyInconsistency <<- rbind(studyInconsistency
+                                , list(id=stgr$study
+                                      , Q=stgr$Q
+                                      , dofs=stgr$dofs
+                                      , pv=stgr$pvalue
+                                      , prob=stgr$pvalue<0.1
+                                      ))
+    res <- stgr
+  },error = function(cond){
+    # print(c("error in study",stid))
+    errorstudies <<- c(errorstudies,stid)
+    # message(conditionMessage(cond))
+  })
+  return(res)
+})
+SGs <- Filter(function(g){!is.null(g)},studyGraphs)
+incgs <- Filter(function(g){return(g$pvalue < 0.95)},SGs)
+# lapply(incgs, function(g){pdf(file=paste(g$study,"effects.pdf"));plotEffects(g);plotDiffs(g);dev.off()})
+lapply(incgs, function(g){plotEffects(g);plotDiffs(g)})
+```

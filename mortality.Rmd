@@ -17,8 +17,8 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
-ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-with-Argos.xlsx")
+ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
+# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-with-Argos.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 
@@ -38,6 +38,7 @@ We now check which of the studies can be used
 
 ```{r studyProcessing, echo=T}
 errorstudies <- c()
+warnmess <- c()
 studyInconsistency <- data.frame()
 studyGraphs <- lapply(studyIds, function(stid){
   tryCatch({
@@ -46,8 +47,26 @@ studyGraphs <- lapply(studyIds, function(stid){
                                 , list(id=stgr$study
                                       , Q=stgr$Q
                                       , dofs=stgr$dofs
-                                      , inc=stgr$inc
+                                      , pv=stgr$pvalue
+                                      , prob=stgr$pvalue<0.1
                                       ))
+    if (stgr$pvalue<0.98){
+      plotDiffs(stgr)
+    }
+  },warning = function(wmes){
+    warnmess <<- c(warnmess,wmes$message)
+    stgr <- fullGraph(stid, studyTable ,rand=F)
+    studyInconsistency <<- rbind(studyInconsistency
+                                , list(id=stgr$study
+                                      , Q=stgr$Q
+                                      , dofs=stgr$dofs
+                                      , pv=stgr$pvalue
+                                      , prob=stgr$pvalue<0.1
+                                      ))
+    
+   if (stgr$pvalue<0.98){
+    plotDiffs(stgr)
+  }
   },error = function(cond){
     # print(c("error in study",stid))
     errorstudies <<- c(errorstudies,stid)
@@ -56,8 +75,9 @@ studyGraphs <- lapply(studyIds, function(stid){
 })
 usableStudies <- setdiff(studyIds, errorstudies)
 studyInconsistency <- studyInconsistency %>% as.data.frame()
-moreIncs <- studyInconsistency[order(studyInconsistency$inc, decreasing = T),]
-# studyInconsistency
+moreIncs <- studyInconsistency[order(studyInconsistency$pv, decreasing = F),]
+moreIncs
+print(warnmess)
 ```
 
 We can not use the following studies `r errorstudies` because of Inconsistency in their reported variance.
@@ -66,7 +86,7 @@ So we move on with the following `r length(usableStudies)`: `r usableStudies`
 
 ### Inconsistencies in multiarms
 
-The following studies present inconsistency in their relative effects: `r moreIncs[moreIncs$Q>0,]$id`. Specifically the first `r nrow(moreIncs[moreIncs$Q>0 & moreIncs$inc>1,])` should be checked.
+The following studies present inconsistency in their relative effects: `r moreIncs[moreIncs$Q>0,]$id`. Specifically the first `r nrow(moreIncs[moreIncs$Q>0 & moreIncs$pv<0.95,])` should be checked.
 
 ### Analysis and forest plots
 
