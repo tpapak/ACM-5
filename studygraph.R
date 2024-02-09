@@ -227,6 +227,8 @@ fullGraph <- function(studyid, data, rand=F){
 
 #get the difference of the reported 
 inconsistency <- function(gr, spt){
+  isInc <- F
+  INCTHR <- 0.33
   loopedges <- difference(as.undirected(gr), spt)
   diffs <- lapply(1:ecount(gr), function(ei){
     eij <- ends(gr,E(gr))[ei,]
@@ -239,7 +241,8 @@ inconsistency <- function(gr, spt){
       reff <- E(gr)$effect[ei]
       var <- E(gr)$variance[ei]
       diff <- reff - teff
-      res <- abs(diff)
+      res <- min(abs(diff/reff), abs(diff/teff))
+      if(res > INCTHR){isInc<<-T}
     }else{
       res <- NA
     }
@@ -298,6 +301,7 @@ inconsistency <- function(gr, spt){
   pvalue <- pchisq(Q, dofs, lower.tail = F)
   graph_attr(gr, name="Q")<-Q
   graph_attr(gr, name="dofs")<-dofs
+  graph_attr(gr, name="inc")<-isInc
   graph_attr(gr, name="pvalue")<-pvalue
   return(gr)
 }
@@ -310,7 +314,7 @@ plotVarRes <- function(gr,circ=F){
   }else{
     plot( gr, edge.label=round(E(gr)$varRes,4)
         , main=paste(gr$study,"Variance Residuals")
-        , layout=layout_in_circle(sg)
+        , layout=layout_in_circle(gr)
         )
   }
 }
@@ -318,23 +322,23 @@ plotVarRes <- function(gr,circ=F){
 plotDiffs <- function(gr,circ=F){
   if(circ==F){
   plot( gr, edge.label=round(E(gr)$diff,4)
-      , main=paste(gr$study,"Residuals Effects")
+      , main=paste(gr$study,"Relative Residuals Effects")
       )
   }else{
     plot( gr, edge.label=round(E(gr)$diff,4)
-        , main=paste(gr$study,"Residuals Effects")
-        , layout=layout_in_circle(sg)
+        , main=paste(gr$study,"Relative Residuals Effects")
+        , layout=layout_in_circle(gr)
         )
   }
 }
 
 plotVars <- function(gr,circ=F){
   if(circ==F){
-    plot(gr, edge.label=round(E(sg)$variance,4)
+    plot(gr, edge.label=round(E(gr)$variance,4)
         , main=paste(gr$study,"variances")
     )
   }else{
-    plot(gr, edge.label=round(E(sg)$variance,4)
+    plot(gr, edge.label=round(E(gr)$variance,4)
        , layout=layout_in_circle(gr)
         , main=paste(gr$study,"variances")
     )
@@ -346,12 +350,12 @@ plotVars <- function(gr,circ=F){
 plotEffects <- function(gr,circ=F){
   if(circ==F){
     plot(gr
-        , edge.label=round(E(sg)$effect,4)
+        , edge.label=round(E(gr)$effect,4)
         , main=paste(gr$study,"effects")
     )
   }else{
     plot(gr
-         , edge.label=round(E(sg)$effect,4)
+         , edge.label=round(E(gr)$effect,4)
           , main=paste(gr$study,"effects")
          , layout=layout_in_circle(gr)
     )

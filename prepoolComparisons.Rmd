@@ -14,7 +14,7 @@ library(readxl)
 source("studygraph.R")
 ```
 ```{r readData, echo=F}
-ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
+ACM_5_with_networks <- read_excel("data/ACM-5%-studyid.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 

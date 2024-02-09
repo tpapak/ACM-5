@@ -1,7 +1,7 @@
 ---
 title: "NodeMerging"
 author: "Theodoros Papakonstantinou"
-date: "2024-01-22"
+date: "2024-02-09"
 output: html_document
 ---
 
@@ -17,8 +17,7 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
-# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-with-Argos.xlsx")
+ACM_5_with_networks <- read_excel("data/ACM-5%-studyid1.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 
@@ -36,81 +35,51 @@ There are `r length(studyIds)` studies
 
 We now check which of the studies can be used
 
-```{r studyProcessing, echo=T}
+```{r studyReport, echo=T}
+studyIds <- unique(studyTable$id)
 errorstudies <- c()
 warnmess <- c()
 studyInconsistency <- data.frame()
 studyGraphs <- lapply(studyIds, function(stid){
+  res <- {}
   tryCatch({
     stgr <- fullGraph(stid, studyTable ,rand=F)
-    studyInconsistency <<- rbind(studyInconsistency
-                                , list(id=stgr$study
-                                      , Q=stgr$Q
-                                      , dofs=stgr$dofs
-                                      , pv=stgr$pvalue
-                                      , prob=stgr$pvalue<0.1
-                                      ))
-    if (stgr$pvalue<0.98){
-      plotDiffs(stgr)
-    }
-  },warning = function(wmes){
-    warnmess <<- c(warnmess,wmes$message)
-    stgr <- fullGraph(stid, studyTable ,rand=F)
-    studyInconsistency <<- rbind(studyInconsistency
-                                , list(id=stgr$study
-                                      , Q=stgr$Q
-                                      , dofs=stgr$dofs
-                                      , pv=stgr$pvalue
-                                      , prob=stgr$pvalue<0.1
-                                      ))
-    
-   if (stgr$pvalue<0.98){
-    plotDiffs(stgr)
-  }
+    res <- stgr
   },error = function(cond){
     # print(c("error in study",stid))
     errorstudies <<- c(errorstudies,stid)
     # message(conditionMessage(cond))
   })
+  return(res)
 })
-usableStudies <- setdiff(studyIds, errorstudies)
-studyInconsistency <- studyInconsistency %>% as.data.frame()
-moreIncs <- studyInconsistency[order(studyInconsistency$pv, decreasing = F),]
-moreIncs
-print(warnmess)
+SGs <- Filter(function(g){!is.null(g)},studyGraphs)
+incgs <- Filter(function(g){g$inc & g$pvalue < 0.90},SGs)
+lapply(incgs, function(g){plotEffects(g);plotDiffs(g)})
 ```
 
-We can not use the following studies `r errorstudies` because of Inconsistency in their reported variance.
+<!-- ### Analysis and forest plots -->
 
-So we move on with the following `r length(usableStudies)`: `r usableStudies`
+<!-- For each network, the network plot and the forest plots of logRRs using the random effects model are shown. We also give the heterogeneity standard deviation and the Pscores (the frequentist analogue of SUCRA) for each network. -->
 
-### Inconsistencies in multiarms
-
-The following studies present inconsistency in their relative effects: `r moreIncs[moreIncs$Q>0,]$id`. Specifically the first `r nrow(moreIncs[moreIncs$Q>0 & moreIncs$pv<0.95,])` should be checked.
-
-### Analysis and forest plots
-
-For each network, the network plot and the forest plots of logRRs using the random effects model are shown. We also give the heterogeneity standard deviation and the Pscores (the frequentist analogue of SUCRA) for each network.
-
-```{r Analysis}
-lapply(1:7,function(netid){
-  print(paste("Network ", netid, sep=""))
-  studyRows <- Reduce(function(acc, sid){
-    tryCatch({
-      sg <- fullGraph(sid,studyTable)
-      ns <- prepareStudyForNetwork(sg,netid,studyTable)
-      nsr <- rowsFromGraph(ns)
-      acc <- rbind(nsr,acc)
-    },error = function(cond){
-    })
-    return(acc)
-    },usableStudies,data.frame())
-  net1 <- netmeta(TE=TE,seTE=seTE,treat1=treat1,treat2=treat2,studlab=studlab
-                  ,data=studyRows)
-  netgraph(net1)
-  forest(net1,pooled="random")
-  print(paste("tau: ",net1$tau, sep=""))
-  Pscores=netrank(net1, small.values = "good")
-  Pscores
-})
-```
+<!-- ```{r Analysis} -->
+<!-- lapply(1:7,function(netid){ -->
+<!--   print(paste("Network ", netid, sep="")) -->
+<!--   studyRows <- Reduce(function(acc, sid){ -->
+<!--     tryCatch({ -->
+<!--       sg <- fullGraph(sid,studyTable) -->
+<!--       ns <- prepareStudyForNetwork(sg,netid,studyTable) -->
+<!--       nsr <- rowsFromGraph(ns) -->
+<!--       acc <- rbind(nsr,acc) -->
+<!--     },error = function(cond){ -->
+<!--     }) -->
+<!--     return(acc) -->
+<!--     },usableStudies,data.frame()) -->
+<!--   net1 <- netmeta(TE=TE,seTE=seTE,treat1=treat1,treat2=treat2,studlab=studlab -->
+<!--                   ,data=studyRows) -->
+<!--   netgraph(net1) -->
+<!--   forest(net1,pooled="random") -->
+<!--   print(paste("tau: ",net1$tau, sep="")) -->
+<!--   Pscores=netrank(net1, small.values = "good") -->
+<!--   Pscores -->
+<!-- }) -->
+<!-- ``` -->
