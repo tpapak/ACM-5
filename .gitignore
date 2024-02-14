@@ -1,4 +1,10 @@
 .DS_Store
 .Rprofile
 .Rproj.user
+*.swp
+.RData
 analysis.Rproj
+.Rhistory
+Archive.zip
+*.graphml
+*.numbers

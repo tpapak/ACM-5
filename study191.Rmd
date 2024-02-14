@@ -1,5 +1,5 @@
 ---
-title: "NodeMerging"
+title: "study191"
 author: "Theodoros Papakonstantinou"
 date: "2024-02-14"
 output: html_document
@@ -14,26 +14,22 @@ library(readxl)
 source("studygraph.R")
 ```
 
-Read mortality data
-
-```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/ACM-5%-studyid-networks-final-renamed-fixed191.xlsx")
+```{r readData, echo=F}
+ACM_5_with_networks <- read_excel("data/ACM-5%-studyid-networks-study191.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 
   filter(!is.na(effect)) %>% 
-  mutate(var = se^2)
+  mutate(var = se^2) %>% 
+  filter(id=="191" | id=="191_a")
 ```
 
-Get all studies
-
-```{r studies ,echo=T}
+```{r studies ,echo=F}
 studyIds <- unique(studyTable$id)
 ```
 
-There are `r length(studyIds)` studies
-
-We now check which of the studies can be used
+I will check several ways of dealing with study 191.
+The first thing is to duplicate the first three rows and change the id
 
 ```{r studyReport, echo=T}
 studyIds <- unique(studyTable$id)
@@ -53,16 +49,14 @@ studyGraphs <- lapply(studyIds, function(stid){
   return(res)
 })
 SGs <- Filter(function(g){!is.null(g)},studyGraphs)
-incgs <- Filter(function(g){g$inc & g$pvalue < 0.90},SGs)
-lapply(incgs, function(g){plotEffects(g);plotDiffs(g)})
+lapply(SGs, function(g){plotEffects(g)})
 ```
 
-### Analysis and forest plots
-
-For each network, the network plot and the forest plots of logRRs using the random effects model are shown. We also give the heterogeneity standard deviation and the Pscores (the frequentist analogue of SUCRA) for each network.
+From '191' and '191_a' we can have 2 versions of network 7 (net 7 and net 8)
+Network 7 uses the prepooled PRO vs low CHO, while network 8 pools AP and PP vs SFA 
 
 ```{r Analysis}
-lapply(1:7,function(netid){
+lapply(7:8,function(netid){
   print(paste("Network ", netid, sep=""))
   studyRows <- Reduce(function(acc, sg){
     tryCatch({
@@ -73,12 +67,16 @@ lapply(1:7,function(netid){
     })
     return(acc)
     },SGs,data.frame())
+  print(studyRows)
   net1 <- netmeta(TE=TE,seTE=seTE,treat1=treat1,treat2=treat2,studlab=studlab
-                  ,data=studyRows)
+                 ,data=studyRows
+                 ,reference.group="low quality CHO / Mono-/ Disaccharides")
   netgraph(net1)
-  forest(net1,pooled="random")
-  print(paste("tau: ",net1$tau, sep=""))
-  Pscores=netrank(net1, small.values = "good")
-  Pscores
+  forest(net1,pooled="fixed")
+  # print(paste("tau: ",net1$tau, sep=""))
+  # Pscores=netrank(net1, small.values = "good")
+  # Pscores
 })
 ```
+We see substantial difference since the prepooled gives a much lower effect for  PRO.
+So I suggest we keep the definition of network 7 as is for study 191
