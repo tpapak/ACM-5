@@ -1,7 +1,10 @@
-library(matlib)
 library(dplyr)
+library(readxl)
+library(matlib)
 library(igraph)
 library(MASS)
+library(netmeta)
+library(meta)
 getArms <- function(study,tr1name="treat 1",tr2name="treat 2"){
   res <- unique(unlist(c(study[tr1name],study[tr2name])))
   res
@@ -368,8 +371,6 @@ prepareStudyForNetwork <- function(gr, netid, studyTable){
   nt2col <- paste("N",netid,"treat2",sep="")
   strows <- studyTable %>% filter(id == sid)
   strows <- strows[!is.na(strows[nt1col]),]
-  
-  
   netnodes <- c(strows[nt1col],strows[nt2col]) %>% unlist () %>% 
     unique() %>% sort()
   newvertices <- data.frame(vid=1:length(netnodes),label=netnodes)
@@ -420,37 +421,186 @@ rowsFromGraph <- function(fg){
     eij <- ends(fg,ei)
     t1 <- V(fg)$label[eij[1]]
     t2 <- V(fg)$label[eij[2]]
+    v1 <- V(fg)$vari[eij[1]]
+    v2 <- V(fg)$vari[eij[2]]
     ri <- c( studlab=fg$study
            , TE=E(fg)$effect[ei]
            , seTE=sqrt(E(fg)$variance[ei])
            , treat1=t1
-           , treat2=t2)
+           , treat2=t2
+           , n1=1/v1
+           , n2=1/v2)
     return(ri)
-  },1:ecount(fg))
-  res <- data.frame(studlab=rows[1,]
-                    ,TE=as.numeric(rows[2,])
-                    ,seTE=as.numeric(rows[3,])
-                    ,treat1=rows[4,]
-                    ,treat2=rows[5,])
+  }, 1:ecount(fg))
+  res <- data.frame( studlab=rows[1,]
+                   , TE=as.numeric(rows[2,])
+                   , seTE=as.numeric(rows[3,])
+                   , treat1=rows[4,]
+                   , treat2=rows[5,]
+                   , n1=as.numeric(rows[6,])
+                   , n2=as.numeric(rows[7,])
+                   )
   return(res)
 }
 
-# library(readxl)
-# ACM_5_with_networks <- read_excel("data/ACM-5%-with-networks-without-Argos.xlsx")
-# #
-# #Insert variance
-# studyTable <- ACM_5_with_networks %>%
-#   filter(!is.na(effect)) %>%
-#   mutate(var = se^2)
-# 
-# # st <- studyTable %>% filter(id=="115") %>% filter(`treat 1`!="MUFA")
-# st <- studyTable %>% filter(`treat 2`!="PRO")
-# sg <- fullGraph("44",st)
-# plotSG(sg)
+pairwiseReport <- function (studyTab
+                           , studyGraphs
+                           , netid
+                           , outcome
+                           ){
+  studyTable <- studyTab
+  SGs <- studyGraphs
+  studyRows <- Reduce(function(acc, sg){
+    tryCatch({
+      ns <- prepareStudyForNetwork(sg, netid, studyTable)
+      nsr <- rowsFromGraph(ns)
+      acc <- rbind(nsr,acc)
+    },error = function(cond){
+    })
+    return(acc)
+  },SGs,data.frame())
+  studyRows <- studyRows %>% mutate(comp = paste(treat1,treat2,sep=":"))
+  direct_comps <- unique(studyRows$comp)
 
-# netid <- 2
-# 
-# sg <- fullGraph("191",studyTable)
-# n2s <- prepareStudyForNetwork(sg,netid,studyTable)
-# n2sr <- rowsFromGraph(n2s)
-# n2sr
+  pairwises <- lapply(direct_comps,function(cmp){
+    # print(c("comparison", cmp))
+    stds <- subset(studyRows,comp==cmp)
+    #? OK to use RR even if it's HR?
+    prw<-metagen(sm="RR",TE,seTE,studlab,data=stds)
+    res <- list( comparison = cmp
+               , metaobj = prw
+               , I2 = prw$I2
+               , tau = prw$tau
+               , RR = exp(prw$TE.common)
+               )
+    
+    return(res)
+  })
+  filepairs <- paste("results/"
+                    ,outcome
+                    ,"/pairwise/"
+                    ,outcome
+                    ,"pairwisesOfnet"
+                    ,netid
+                    ,".rds",sep="")
+  saveRDS(pairwises, file=filepairs)
+  filename <-paste("results/"
+                   ,outcome
+                   ,"/pairwise/pairwisesOfnet"
+                   ,netid,".pdf",sep="")
+  pdf(file=filename,width=9,height=6)
+  for(i in 1:length(pairwises)){
+    pw <- pairwises[[i]]
+    labelc=pw$comparison
+    forest(pw$metaobj
+          , label.right=labelc
+          , smlab=paste("RR")
+          )
+    stds <- pw$metaobj$data
+    if(nrow(stds) >= 10){
+      funnel(pw$metaobj,legend=labelc)
+    }
+  }
+  dev.off()
+}
+
+netReport <- function(studyTab, studyGraphs, netid, outcome, subgroup="all"){
+  SGs <- studyGraphs
+  if(subgroup != "all"){
+    groups <- studyTab[!is.na(studyTab[subgroup]), subgroup] %>% 
+      unique() %>% unlist()
+  }else{
+    groups<-c("all")
+  }
+  dir.create(paste("results",outcome,sep="/")
+             ,showWarnings = F)
+  dir.create(paste("results",outcome,"network",sep="/")
+             ,showWarnings = F)
+  dir.create(paste("results",outcome,"network",subgroup,sep="/")
+             ,showWarnings = F)
+  lapply(groups, function(group){
+    if(subgroup!="all"){
+      print(c("Subgroup",group))
+      folderPath <- paste("results",outcome,"network",subgroup,group,sep="/")
+      studyTable <- filter(studyTab, c(studyTab[subgroup]==group))
+    }else{
+      folderPath <- paste("results",outcome,"network",subgroup,sep="/")
+      studyTable <- studyTab
+    }
+    studyRows <- Reduce(function(acc, sg){
+      tryCatch({
+        ns <- prepareStudyForNetwork(sg,netid,studyTable)
+        nsr <- rowsFromGraph(ns)
+        acc <- rbind(nsr,acc)
+      },error = function(cond){
+      })
+      return(acc)
+    },SGs,data.frame())
+    if(subgroup != "all" & length(unique(studyRows$studlab))<10){
+     warning("less than 10 studies in group")
+      return(NULL)
+    }else{
+      dir.create( folderPath
+                , showWarnings = F)
+    }
+    net1 <- netmeta( TE=TE, seTE=seTE
+                   , treat1=treat1, treat2=treat2
+                   , studlab=studlab
+                   , data=studyRows
+                   , sm="RR"
+                   )
+    pointSizes <- sapply( net1$trts
+                , function(arm){
+                  n1s <- subset(studyRows,treat1==arm)$n1 %>% sum()
+                  n2s <- subset(studyRows,treat2==arm)$n2 %>% sum()
+                  return(n1s+n2s)
+                })
+    netgraph( net1
+            , plastic = F
+            , number.of.studies = TRUE
+            , cex.points=pointSizes)
+    forest( net1
+          , pooled="random")
+    netplots <- paste(folderPath,"/",outcome,group,"net",netid,".pdf",sep="")
+    pdf(file=netplots,width=9,height=6)
+    netgraph( net1
+            , plastic = F
+            , number.of.studies = TRUE
+            , cex.points=pointSizes)
+    forest( net1
+          , pooled="random")
+    dev.off() 
+    stIDs <- unique(studyRows$studlab)
+    #Number of cases
+    ncasers <- filter(studyTable, id %in% stIDs & !is.na(n_cases) )
+    oncasids <- stIDs[!(stIDs %in% ncasers$id)]
+    oncasers <- filter(studyTable, id %in% oncasids & !is.na(n_cases) )
+    ncases <- c(ncasers$n_cases, oncasers$n_cases) %>% 
+      as.numeric() %>% sum(na.rm=T)
+    
+    #Number of participants
+    nparrs <- filter(studyTable, id %in% stIDs & !is.na(n_participants) )
+    onparsids <- stIDs[!(stIDs %in% nparrs$id)]
+    onpars <- filter(studyTable, id %in% onparsids & !is.na(n_participants) )
+    npars <- c(nparrs$n_participants,onpars$n_participants) %>% sum()
+    
+    d1 <- decomp.design(net1)
+    ns <- netsplit(net1)
+    d1$Q.inc.random
+    pscores=netrank(net1, small.values = "good")
+    res <- list( netid = netid
+               , PScores = pscores$ranking.random
+               , tau = net1$tau
+               , leagueTable = netleague(net1)$random
+               , nStudies = length(stIDs)
+               , netSplit = ns
+               , n_cases = ncases
+               , n_participants = npars
+               , dbt = d1$Q.inc.random
+               , netobj = net1
+               )
+    filenet <- paste(folderPath,"/",outcome,group,"net",netid,".rds",sep="")
+    saveRDS(res, file=filenet)
+    return(res)
+  })
+}

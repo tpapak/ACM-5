@@ -1,7 +1,7 @@
 ---
-title: "NutritionMortality"
+title: "Nutrition Type 2 Diabetes"
 author: "Theodoros Papakonstantinou"
-date: "2024-03-01"
+date: "2024-02-29"
 output: html_document
 ---
 
@@ -11,13 +11,13 @@ knitr::opts_chunk$set(echo = TRUE)
 source("studygraph.R")
 ```
 
-Read mortality data
+Read t2d data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-1.xlsx")
+t2dData <- read_excel("data/t2d/T2D-with-networks-HGI_LGI.xlsx")
 
 #Insert variance
-studyTable <- ACM_5_with_networks %>% 
+studyTable <- t2dData %>% 
   filter(!is.na(effect)) %>% 
   mutate(var = se^2)
 ```
@@ -63,26 +63,27 @@ The R objects are saved as `.rds` files
 ```{r Analysis}
 report <- lapply(1:7,function(netid){
     print(paste("Network ", netid, sep=""))
-    pairwiseReport(studyTable, SGs, netid, "mortality")
-    netReport(studyTable, SGs, netid, "mortality")
+    pairwiseReport(studyTable, SGs, netid, "t2d")
+    netReport(studyTable, SGs, netid, "t2d")
 })
 ```
+
 
 ### Subgroup for sex
 ```{r subgroup sex Analysis}
 report <- lapply(1:7,function(netid){
     print(paste("Network ", netid, sep=""))
-    netReport(studyTable, SGs, netid, "mortality", subgroup="sex")
+    netReport(studyTable, SGs, netid, "t2d", subgroup="sex")
 })
 ```
 
 ## Read the Results - Example Network 2
 
 To access the network's 2 results you just load
-`results/mortality/network/mortalitynet2.rds`
+`results/t2d/network/t2dnet2.rds`
 either by the command indicated or by opening the file with rstudio
 
 ```{R results_net_2example}
-mortalityallnet2 <- readRDS("results/mortality/network/all/mortalityallnet2.rds")
-print(mortalityallnet2)
+t2dallnet2 <- readRDS("results/t2d/network/all/t2dallnet2.rds")
+print(t2dallnet2)
 ```
