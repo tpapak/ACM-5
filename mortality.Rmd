@@ -1,7 +1,7 @@
 ---
 title: "NutritionMortality"
 author: "Theodoros Papakonstantinou"
-date: "2024-03-01"
+date: "2024-03-05"
 output: html_document
 ---
 
@@ -14,7 +14,7 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-1.xlsx")
+ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-with-subgroups.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 
@@ -68,11 +68,27 @@ report <- lapply(1:7,function(netid){
 })
 ```
 
-### Subgroup for sex
-```{r subgroup sex Analysis}
+### Subgroup for RoB
+```{r subgroup ROB Analysis}
 report <- lapply(1:7,function(netid){
     print(paste("Network ", netid, sep=""))
-    netReport(studyTable, SGs, netid, "mortality", subgroup="sex")
+    netReport(studyTable, SGs, netid, "mortality", subgroup="RoB_subg")
+})
+```
+
+### Subgroup for Location
+```{r subgroup Location Analysis}
+report <- lapply(1:7,function(netid){
+    print(paste("Network ", netid, sep=""))
+    netReport(studyTable, SGs, netid, "mortality", subgroup="location_subg")
+})
+```
+
+### Subgroup for multiple Diet
+```{r subgroup multidiet Analysis}
+report <- lapply(1:7,function(netid){
+    print(paste("Network ", netid, sep=""))
+    netReport(studyTable, SGs, netid, "mortality", subgroup="multiplediet_subg")
 })
 ```
 
@@ -81,8 +97,38 @@ report <- lapply(1:7,function(netid){
 To access the network's 2 results you just load
 `results/mortality/network/mortalitynet2.rds`
 either by the command indicated or by opening the file with rstudio
-
 ```{R results_net_2example}
 mortalityallnet2 <- readRDS("results/mortality/network/all/mortalityallnet2.rds")
-print(mortalityallnet2)
+```
+Get the order of treatments 
+```{R results_net_2examplea}
+mortalityallnet2$netobj$trts
+```
+Define a custom treatment order for the forestplot
+```{R results_net_2exampleb}
+trtsOrder <- c("PUFA","PRO", "SFA", "TFA","CHO", "MUFA"  )
+```
+
+We have to rerun netmeta
+```{R results_net_2examplenetmeta}
+net2 <- netmeta( TE=TE, seTE=seTE
+               , treat1=treat1, treat2=treat2
+               , studlab=studlab
+               , data=mortalityallnet2$netobj$data
+               , sm="RR"
+               , seq=trtsOrder
+               )
+```
+
+Get the league table
+```{R results_net_2exampleLeague}
+nl2 <- netleague(net2)
+print(nl2$random)
+```
+And the forest plots will follow the order defined
+```{R results_net_2forest}
+ forest(net2
+       , label.right="Network 2"
+       , smlab=paste("RR Mortality")
+       )
 ```
