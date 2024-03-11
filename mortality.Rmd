@@ -1,7 +1,7 @@
 ---
 title: "NutritionMortality"
 author: "Theodoros Papakonstantinou"
-date: "2024-03-05"
+date: "2024-03-11"
 output: html_document
 ---
 
@@ -14,12 +14,17 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-with-subgroups.xlsx")
+ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-with-subgroups-179.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 
   filter(!is.na(effect)) %>% 
   mutate(var = se^2)
+```
+
+```{r treatmentOrders ,echo=F}
+treatment_order <- read_excel("treatment_order.xlsx", 
+                              skip = 1)
 ```
 
 Get all studies

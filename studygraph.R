@@ -5,6 +5,8 @@ library(igraph)
 library(MASS)
 library(netmeta)
 library(meta)
+
+
 getArms <- function(study,tr1name="treat 1",tr2name="treat 2"){
   res <- unique(unlist(c(study[tr1name],study[tr2name])))
   res
@@ -365,53 +367,60 @@ plotEffects <- function(gr,circ=F){
   }
 }
 
-prepareStudyForNetwork <- function(gr, netid, studyTable){
+prepareStudyForNetwork <- function(gr, netid, studyTable, treatmentOrders=treatment_order){
   sid <- gr$study
+  treatmentOrder = treatmentOrders[,paste("Net",netid,sep="")] %>% 
+    na.exclude() %>% 
+    unlist() 
   nt1col <- paste("N",netid,"treat1",sep="")
   nt2col <- paste("N",netid,"treat2",sep="")
   strows <- studyTable %>% filter(id == sid)
   strows <- strows[!is.na(strows[nt1col]),]
-  netnodes <- c(strows[nt1col],strows[nt2col]) %>% unlist () %>% 
-    unique() %>% sort()
-  newvertices <- data.frame(vid=1:length(netnodes),label=netnodes)
-  cg <- make_full_graph(nrow(newvertices),directed=F)
-  newEdges <- ends(cg,E(cg)) %>% t() %>% as.vector()
-  newSG <- graph(newEdges, directed=T)
-  graph_attr(newSG, name="study")<-sid
-  vertex_attr(newSG, name="label")<-newvertices$label
-  fullSG <- Reduce(function(acc, i){
-    nv <- V(newSG)$label[i]
-    vrs1 <- strows[strows[nt1col]==nv,"treat 1"] %>% as.vector()
-    vrs2 <- strows[strows[nt2col]==nv,"treat 2"] %>% as.vector()
-    mergedNodes <- c(vrs1,vrs2) %>% unlist()
-    vids <- which(V(gr)$label %in% mergedNodes)
-    varis <- V(gr)$vi[vids]
-    effis <- V(gr)$effi[vids]
-    nw <- sum(sapply(X=varis,FUN=function(v){return(1/v)}))
-    newEffi <- sum(sapply(X=1:length(effis)
-                  ,FUN=function(vid){return(effis[vid]/varis[vid])})) / nw
-    vertex_attr(acc,index=i,name="effi")<-newEffi
-    vertex_attr(acc,index=i,name="vari")<-1/nw
-    return(acc)
-  }, 1:nrow(newvertices),newSG)
-  newEffs <- mapply(function(ei){
-    eij <- ends(fullSG,ei)
-    vi <- eij[1]
-    vj <- eij[2]
-    effij <- V(fullSG)$effi[vj] -
-             V(fullSG)$effi[vi]
-    return(effij) 
-  }, 1:ecount(newSG))
-  newVariances <- mapply(function(ei){
-    eij <- ends(fullSG,ei)
-    vi <- eij[1]
-    vj <- eij[2]
-    varij <- V(fullSG)$vari[vj] +
-             V(fullSG)$vari[vi]
-    return(varij) 
-  }, 1:ecount(newSG))
-  edge_attr(fullSG,name="effect")<-newEffs
-  edge_attr(fullSG,name="variance")<-newVariances 
+  stnodes <- c(strows[nt1col],strows[nt2col]) %>% unlist() %>% unique()
+  netnodes <- treatmentOrder[treatmentOrder %in% stnodes]
+  if(nrow(strows)>0){
+    newvertices <- data.frame(vid=1:length(netnodes),label=netnodes)
+    cg <- make_full_graph(nrow(newvertices),directed=F)
+    newEdges <- ends(cg,E(cg)) %>% t() %>% as.vector()
+    newSG <- graph(newEdges, directed=T)
+    graph_attr(newSG, name="study")<-sid
+    vertex_attr(newSG, name="label")<-newvertices$label
+    fullSG <- Reduce(function(acc, i){
+      nv <- V(newSG)$label[i]
+      vrs1 <- strows[strows[nt1col]==nv,"treat 1"] %>% as.vector()
+      vrs2 <- strows[strows[nt2col]==nv,"treat 2"] %>% as.vector()
+      mergedNodes <- c(vrs1,vrs2) %>% unlist()
+      vids <- which(V(gr)$label %in% mergedNodes)
+      varis <- V(gr)$vi[vids]
+      effis <- V(gr)$effi[vids]
+      nw <- sum(sapply(X=varis,FUN=function(v){return(1/v)}))
+      newEffi <- sum(sapply(X=1:length(effis)
+                    ,FUN=function(vid){return(effis[vid]/varis[vid])})) / nw
+      vertex_attr(acc,index=i,name="effi")<-newEffi
+      vertex_attr(acc,index=i,name="vari")<-1/nw
+      return(acc)
+    }, 1:nrow(newvertices),newSG)
+    newEffs <- mapply(function(ei){
+      eij <- ends(fullSG,ei)
+      vi <- eij[1]
+      vj <- eij[2]
+      effij <- V(fullSG)$effi[vj] -
+               V(fullSG)$effi[vi]
+      return(effij) 
+    }, 1:ecount(newSG))
+    newVariances <- mapply(function(ei){
+      eij <- ends(fullSG,ei)
+      vi <- eij[1]
+      vj <- eij[2]
+      varij <- V(fullSG)$vari[vj] +
+               V(fullSG)$vari[vi]
+      return(varij) 
+    }, 1:ecount(newSG))
+    edge_attr(fullSG,name="effect")<-newEffs
+    edge_attr(fullSG,name="variance")<-newVariances 
+ }else{
+   fullSG <- NULL
+ }
  return(fullSG) 
 }
 
@@ -443,7 +452,7 @@ rowsFromGraph <- function(fg){
   return(res)
 }
 
-pairwiseReport <- function (studyTab
+pairwiseReport <- function ( studyTab
                            , studyGraphs
                            , netid
                            , outcome
@@ -451,22 +460,34 @@ pairwiseReport <- function (studyTab
   studyTable <- studyTab
   SGs <- studyGraphs
   studyRows <- Reduce(function(acc, sg){
-    tryCatch({
-      ns <- prepareStudyForNetwork(sg, netid, studyTable)
+    ns <- prepareStudyForNetwork(sg, netid, studyTable)
+    if( !is.null(ns)){
       nsr <- rowsFromGraph(ns)
       acc <- rbind(nsr,acc)
-    },error = function(cond){
-    })
+    }
     return(acc)
   },SGs,data.frame())
   studyRows <- studyRows %>% mutate(comp = paste(treat1,treat2,sep=":"))
+  net1 <- netmeta( TE=TE, seTE=seTE
+                   , treat1=treat1, treat2=treat2
+                   , studlab=studlab
+                   , data=studyRows
+                   , sm="RR"
+                )
   direct_comps <- unique(studyRows$comp)
-
-  pairwises <- lapply(direct_comps,function(cmp){
-    # print(c("comparison", cmp))
+  getRoB <- function(stid){
+    rob <- studyTable[studyTable$id==stid,]$RoB_subg[1]
+    if(is.null(rob)){
+      res <- "NA"
+    }else{
+      res <- rob
+    }
+    return(res)
+  }
+  studyRows$RoB <- sapply(studyRows$studlab,getRoB)
+  pairwises <- lapply(direct_comps, function(cmp){
     stds <- subset(studyRows,comp==cmp)
-    #? OK to use RR even if it's HR?
-    prw<-metagen(sm="RR",TE,seTE,studlab,data=stds)
+    prw<-metagen(sm="RR",TE,seTE,studlab,data=stds,common=F,tau.preset=net1$tau)
     res <- list( comparison = cmp
                , metaobj = prw
                , I2 = prw$I2
@@ -488,13 +509,16 @@ pairwiseReport <- function (studyTab
                    ,outcome
                    ,"/pairwise/pairwisesOfnet"
                    ,netid,".pdf",sep="")
-  pdf(file=filename,width=9,height=6)
+  pdf(file=filename,width=10,height=8)
   for(i in 1:length(pairwises)){
     pw <- pairwises[[i]]
     labelc=pw$comparison
-    forest(pw$metaobj
+    forest( pw$metaobj
           , label.right=labelc
+          , weight.study="random"
           , smlab=paste("RR")
+          , common=F        
+          , rightcols=c("effect","ci","w.random","RoB")
           )
     stds <- pw$metaobj$data
     if(nrow(stds) >= 10){
@@ -504,7 +528,15 @@ pairwiseReport <- function (studyTab
   dev.off()
 }
 
-netReport <- function(studyTab, studyGraphs, netid, outcome, subgroup="all"){
+netReport <- function(studyTab
+                      , studyGraphs
+                      , netid
+                      , outcome
+                      , subgroup="all"
+                      , treatmentOrders=treatment_order){
+  treatmentOrder = treatmentOrders[,paste("Net",netid,sep="")] %>% 
+    na.exclude() %>% 
+    unlist() 
   SGs <- studyGraphs
   if(subgroup != "all"){
     groups <- studyTab[!is.na(studyTab[subgroup]), subgroup] %>% 
@@ -528,12 +560,11 @@ netReport <- function(studyTab, studyGraphs, netid, outcome, subgroup="all"){
       studyTable <- studyTab
     }
     studyRows <- Reduce(function(acc, sg){
-      tryCatch({
-        ns <- prepareStudyForNetwork(sg,netid,studyTable)
+      ns <- prepareStudyForNetwork(sg, netid, studyTable)
+      if( !is.null(ns)){
         nsr <- rowsFromGraph(ns)
         acc <- rbind(nsr,acc)
-      },error = function(cond){
-      })
+      }
       return(acc)
     },SGs,data.frame())
     if(subgroup != "all" & length(unique(studyRows$studlab))<10){
@@ -543,11 +574,15 @@ netReport <- function(studyTab, studyGraphs, netid, outcome, subgroup="all"){
       dir.create( folderPath
                 , showWarnings = F)
     }
+    existingNodes <- c(studyRows$treat1,studyRows$treat2) %>% unlist() %>% unique()
+    trtOrd <- treatmentOrder[treatmentOrder %in% existingNodes]
     net1 <- netmeta( TE=TE, seTE=seTE
                    , treat1=treat1, treat2=treat2
                    , studlab=studlab
                    , data=studyRows
                    , sm="RR"
+                   , seq=trtOrd
+                   , reference.group = trtOrd %>% tail(1)
                    )
     pointSizes <- sapply( net1$trts
                 , function(arm){
@@ -583,9 +618,11 @@ netReport <- function(studyTab, studyGraphs, netid, outcome, subgroup="all"){
     onparsids <- stIDs[!(stIDs %in% nparrs$id)]
     onpars <- filter(studyTable, id %in% onparsids & !is.na(n_participants) )
     npars <- c(nparrs$n_participants,onpars$n_participants) %>% sum()
-    
     d1 <- decomp.design(net1)
-    ns <- netsplit(net1)
+    ns <- netsplit(net1, order=trtOrd, backtransf = T, common=F, sm="RR")
+    ns$indirect.random$RR <- exp(ns$indirect.random$TE)
+    ns$indirect.random$lcRR <- exp(ns$indirect.random$lower)
+    ns$indirect.random$ucRR <- exp(ns$indirect.random$upper)
     d1$Q.inc.random
     pscores=netrank(net1, small.values = "good")
     res <- list( netid = netid

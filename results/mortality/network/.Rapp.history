@@ -1,4 +1,0 @@
-load("/Users/tosku/Sync/Documents/nutrition/ACM-5/results/mortality/network/net1.rds")
-load("/Users/tosku/Sync/Documents/nutrition/ACM-5/results/mortality/network/net7.rds")
-load("/Users/tosku/Sync/Documents/nutrition/ACM-5/results/mortality/network/net6.rds")
-load("/Users/tosku/Sync/Documents/nutrition/ACM-5/results/mortality/network/mortalitynet6.rds")

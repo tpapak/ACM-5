@@ -21,6 +21,10 @@ studyTable <- t2dData %>%
   filter(!is.na(effect)) %>% 
   mutate(var = se^2)
 ```
+```{r treatmentOrders ,echo=F}
+treatment_order <- read_excel("treatment_order.xlsx", 
+                              skip = 1)
+```
 
 Get all studies
 
