@@ -14,7 +14,7 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-with-subgroups-179.xlsx")
+ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-with-subgroups-solution179.xlsx")
 
 #Insert variance
 studyTable <- ACM_5_with_networks %>% 

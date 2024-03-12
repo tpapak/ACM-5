@@ -623,6 +623,9 @@ netReport <- function(studyTab
     ns$indirect.random$RR <- exp(ns$indirect.random$TE)
     ns$indirect.random$lcRR <- exp(ns$indirect.random$lower)
     ns$indirect.random$ucRR <- exp(ns$indirect.random$upper)
+    ns$compare.random$RR <- exp(ns$compare.random$TE)
+    ns$compare.random$lcRR <- exp(ns$compare.random$lower)
+    ns$compare.random$ucRR <- exp(ns$compare.random$upper)
     d1$Q.inc.random
     pscores=netrank(net1, small.values = "good")
     res <- list( netid = netid
