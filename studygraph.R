@@ -528,12 +528,12 @@ pairwiseReport <- function ( studyTab
   dev.off()
 }
 
-netReport <- function(studyTab
-                      , studyGraphs
-                      , netid
-                      , outcome
-                      , subgroup="all"
-                      , treatmentOrders=treatment_order){
+netReport <- function( studyTab
+                     , studyGraphs
+                     , netid
+                     , outcome
+                     , subgroup="all"
+                     , treatmentOrders=treatment_order){
   treatmentOrder = treatmentOrders[,paste("Net",netid,sep="")] %>% 
     na.exclude() %>% 
     unlist() 
@@ -606,19 +606,31 @@ netReport <- function(studyTab
           , pooled="random")
     dev.off() 
     stIDs <- unique(studyRows$studlab)
-    #Number of cases
-    ncasers <- filter(studyTable, id %in% stIDs & !is.na(n_cases) )
-    oncasids <- stIDs[!(stIDs %in% ncasers$id)]
-    oncasers <- filter(studyTable, id %in% oncasids & !is.na(n_cases) )
-    ncases <- c(ncasers$n_cases, oncasers$n_cases) %>% 
-      as.numeric() %>% sum(na.rm=T)
+    #Get study and cohort
+    stcoh <- function(studlab){
+      stsplt <- strsplit(studlab,split="_")
+      res <- paste(stsplt[[1]][1],stsplt[[1]][2],sep="_")
+      return(res)
+    }
+    countCohorts <- function(clnm){
+      stcohs <- mapply(stcoh,stIDs) %>% unique()
+      stchncs <- studyTable[mapply(function(id){return(stcoh(id) %in% stcohs)}
+                                   ,studyTable$id),]
+      stchncs <- stchncs[!is.na(stchncs[,clnm]),]
+      #exclude study rows with multiple cohorts (179 motrality)
+      stchncs <- stchncs[!grepl("[+]", stchncs$id),]
+      cohs <- unique(stchncs$cohort_name)
+      countsPerCohort <- 
+        mapply(function(coh){
+          numspc <- unlist(stchncs[stchncs$cohort_name==coh,clnm]) %>% 
+            as.numeric()
+          return(mean(numspc))
+        }, cohs)
+      return(sum(countsPerCohort))
+    }
+    ncases <- countCohorts("n_cases")
+    npars <- countCohorts("n_participants")
     
-    #Number of participants
-    nparrs <- filter(studyTable, id %in% stIDs & !is.na(n_participants) )
-    onparsids <- stIDs[!(stIDs %in% nparrs$id)]
-    onpars <- filter(studyTable, id %in% onparsids & !is.na(n_participants) )
-    npars <- c(nparrs$n_participants,onpars$n_participants) %>% sum()
-    d1 <- decomp.design(net1)
     ns <- netsplit(net1, order=trtOrd, backtransf = T, common=F, sm="RR")
     ns$indirect.random$RR <- exp(ns$indirect.random$TE)
     ns$indirect.random$lcRR <- exp(ns$indirect.random$lower)
@@ -626,6 +638,7 @@ netReport <- function(studyTab
     ns$compare.random$RR <- exp(ns$compare.random$TE)
     ns$compare.random$lcRR <- exp(ns$compare.random$lower)
     ns$compare.random$ucRR <- exp(ns$compare.random$upper)
+    d1 <- decomp.design(net1)
     d1$Q.inc.random
     pscores=netrank(net1, small.values = "good")
     res <- list( netid = netid

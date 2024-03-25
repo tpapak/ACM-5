@@ -14,12 +14,15 @@ source("studygraph.R")
 Read mortality data
 
 ```{r readData, echo=T}
-ACM_5_with_networks <- read_excel("data/mortality/ACM-5%-networks-final-with-subgroups-solution179.xlsx")
+ACM_5_with_networks <- 
+  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP.xlsx", 
+                                                   sheet = "data-ACM")
 
-#Insert variance
-studyTable <- ACM_5_with_networks %>% 
-  filter(!is.na(effect)) %>% 
-  mutate(var = se^2)
+studyTable <- ACM_5_with_networks %>%
+  filter(!is.na(effect)) %>%
+  mutate(sef = ifelse(is.na(se_Adj),1, se_Adj))  %>% #get Adjustments for common cohorts
+  mutate(var = (se*sef)^2)
+
 ```
 
 ```{r treatmentOrders ,echo=F}
@@ -55,6 +58,7 @@ studyGraphs <- lapply(studyIds, function(stid){
   return(res)
 })
 SGs <- Filter(function(g){!is.null(g)},studyGraphs)
+names(SGs)<-lapply(SGs,function(x){return(x$study)}) %>% unlist()
 incgs <- Filter(function(g){g$inc & g$pvalue < 0.90},SGs)
 lapply(incgs, function(g){plotDiffs(g)})
 ```
