@@ -79,11 +79,12 @@ studyGraph <- function(studyid, data) {
 
 #Get minimum spanning tree by weighting the comparisons variance
 studySpanningTree <- function(studygraph, rand=F){
-  #study weights
   if(rand){
     spt <- subgraph.edges(studygraph,sample_spanning_tree(studygraph))
   }else{
+    #study weights
     ws <- E(studygraph)$variance
+    #Minimum spanning tree search, meaning we include more precise comparisons
     spt <- mst(studygraph, weights = ws)
   }
   return(spt)
@@ -109,7 +110,7 @@ varianceGraph <- function(studygraph, spt){
     vi <- eij[1]
     vj <- eij[2]
     eijs <- get.edge.ids(spt, c(cornerV$vid,vi,cornerV$vid,vj))
-    varij <- E(spt)[eijs]$variance %>% max()
+    varij <- E(spt)[eijs]$variance %>% max() #Impute biggest variance
     vg <- add_edges(spt, c(vi,vj), variance=varij)
   }
   return(vg)

@@ -2,7 +2,7 @@ rm(list=ls())
 source("studygraph.R")
 library(readxl)
 ACM_5_with_networks <- 
-  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP.xlsx", 
+  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP-fix196.xlsx", 
                                                    sheet = "data-ACM")
 
 treatment_order <- read_excel("treatment_order.xlsx", 
@@ -31,7 +31,7 @@ studyGraphs <- lapply(studyIds, function(stid){
 })
 SGs <- Filter(function(g){!is.null(g)},studyGraphs)
 names(SGs)<-lapply(SGs,function(x){return(x$study)}) %>% unlist()
-netReport(studyTable, SGs, 2, outcome="mortality")
+# netReport(studyTable, SGs, 2, outcome="mortality")
 
 # pairwiseReport(studyTable, SGs, 7, outcome="mortality")
 

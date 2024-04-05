@@ -15,7 +15,7 @@ Read mortality data
 
 ```{r readData, echo=T}
 ACM_5_with_networks <- 
-  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP.xlsx", 
+  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP-fix196.xlsx", 
                                                    sheet = "data-ACM")
 
 studyTable <- ACM_5_with_networks %>%
@@ -98,6 +98,13 @@ report <- lapply(1:7,function(netid){
 report <- lapply(1:7,function(netid){
     print(paste("Network ", netid, sep=""))
     netReport(studyTable, SGs, netid, "mortality", subgroup="multiplediet_subg")
+})
+```
+### Subgroup for problematic studies
+```{r subgroup problematic analysis}
+report <- lapply(1:7,function(netid){
+    print(paste("Network ", netid, sep=""))
+    netReport(studyTable, SGs, netid, "mortality", subgroup="problematic_subg")
 })
 ```
 
