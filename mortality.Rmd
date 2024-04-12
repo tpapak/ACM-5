@@ -1,7 +1,7 @@
 ---
 title: "NutritionMortality"
 author: "Theodoros Papakonstantinou"
-date: "2024-03-11"
+date: "2024-04-12"
 output: html_document
 ---
 
@@ -15,7 +15,7 @@ Read mortality data
 
 ```{r readData, echo=T}
 ACM_5_with_networks <- 
-  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP-fix196.xlsx", 
+  read_excel("data/mortality/ACM-5%-networks-overlap-correction-TP-SW.xlsx", 
                                                    sheet = "data-ACM")
 
 studyTable <- ACM_5_with_networks %>%
