@@ -489,11 +489,18 @@ pairwiseReport <- function ( studyTab
   pairwises <- lapply(direct_comps, function(cmp){
     stds <- subset(studyRows,comp==cmp)
     prw<-metagen(sm="RR",TE,seTE,studlab,data=stds,common=F,tau.preset=net1$tau)
+    stds <- prw$data
+    if(nrow(stds) >= 10){
+      eggers_test <- metabias(prw, method.bias = "Egger")
+    }else{
+      eggers_test <- NA
+    }
     res <- list( comparison = cmp
                , metaobj = prw
                , I2 = prw$I2
                , tau = prw$tau
                , RR = exp(prw$TE.common)
+               , eggers_bias = eggers_test
                )
     
     return(res)
